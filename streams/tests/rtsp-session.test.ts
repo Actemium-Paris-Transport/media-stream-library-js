@@ -283,6 +283,67 @@ describe('rtsp-session play', (test) => {
   })
 })
 
+describe('rtsp-session play with headers', (test) => {
+  test('should emit 1 OPTIONS request and wait for an answer', async (ctx) => {
+    const s = new RtspSession({ uri: 'rtsp://whatever/path' })
+    let calls = 0
+    let method: RTSP_METHOD
+    s.outgoing.on('data', (req) => {
+      calls++
+      method = req.method
+    })
+    const headers = {
+      'Scale': '2.0'
+    }
+    s.play(0, headers)
+    const done = new Promise((resolve) => (ctx.resolve = resolve))
+    setTimeout(() => {
+      try {
+        assert.is(calls, 1)
+        assert.is(method, RTSP_METHOD.OPTIONS)
+        ctx.resolve()
+      } catch (e) {
+        ctx.resolve(e)
+      }
+    }, 10)
+    await done
+  })
+
+  test('should emit 4 commands in a given sequence', async (ctx) => {
+    const s = new RtspSession({ uri: 'rtsp://whatever/path' })
+    let calls = 0
+    const methods: Array<RTSP_METHOD> = []
+    s.outgoing.on('data', (req) => {
+      if (req.type !== MessageType.RTSP) {
+        return
+      }
+      methods.push(req.method)
+      const rtspResponse = responses[calls++]
+      const rtspMessage = {
+        data: Buffer.from(rtspResponse),
+        type: MessageType.RTSP,
+      }
+      s.incoming.write(rtspMessage) // Give a canned response
+      if (req.method === 'DESCRIBE') {
+        const sdpMessage = messageFromBuffer(Buffer.from(rtspResponse))
+        s.incoming.write(sdpMessage)
+      }
+      if (req.method === 'PLAY') {
+        s.incoming.end()
+      }
+    })
+    const done = new Promise((resolve) => (ctx.resolve = resolve))
+    s.incoming.on('finish', () => {
+      assert.is(methods.join(), ['OPTIONS', 'DESCRIBE', 'SETUP', 'PLAY'].join())
+      // clean up any outstanding timeouts (e.g. renew interval)
+      s._reset()
+      ctx.resolve()
+    })
+    s.play()
+    await done
+  })
+})
+
 describe('rtsp-sessiont pause', (test) => {
   test('should emit 1 PAUSE request', async (ctx) => {
     const s = new RtspSession({ uri: 'rtsp://whatever/path' })

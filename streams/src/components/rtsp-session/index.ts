@@ -424,7 +424,7 @@ export class RtspSession extends Tube {
    * start sending.
    * @param  startTime - Time (seconds) at which to start playing
    */
-  play(startTime = 0) {
+  play(startTime = 0, headers: Headers = {}) {
     if (this._state === STATE.IDLE) {
       this.startTime = Number(startTime) || 0
       this._enqueue({ method: RTSP_METHOD.OPTIONS })
@@ -436,6 +436,7 @@ export class RtspSession extends Tube {
       this._enqueue({
         method: RTSP_METHOD.PLAY,
         headers: {
+          ...headers,
           Session: this._sessionId,
         },
         uri: this._sessionControlURL,
